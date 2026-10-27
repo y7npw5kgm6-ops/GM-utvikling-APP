@@ -20,6 +20,8 @@
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   header { padding: 20px 16px 8px; max-width: 1100px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .brand img { height: 44px; width: auto; max-width: 100%; }
   header h1 { margin: 0 0 4px; font-size: 1.5rem; }
   header p { margin: 0; color: var(--muted); }
   main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 40px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
@@ -69,6 +71,9 @@
 </head>
 <body>
 <header>
+  <div class="brand">
+    <img src="envatec-logo.png" alt="Envatec AS" onerror="this.remove()">
+  </div>
   <h1>Anleggsanalyse for vannbårne anlegg</h1>
   <p>Legg inn målte verdier og observasjoner. Appen vurderer væskekvaliteten og foreslår tiltak, blant annet delstrømsfiltre fra Envatec AS.</p>
 </header>
@@ -76,6 +81,16 @@
 <main>
   <section class="card" id="form-card">
     <form id="form" autocomplete="off">
+      <fieldset>
+        <legend>Kontaktinformasjon</legend>
+        <div class="grid">
+          <label>Firma<input name="company" type="text" autocomplete="organization"></label>
+          <label>Kontaktperson<input name="contact" type="text" autocomplete="name"></label>
+          <label>E-post<input name="email" type="email" autocomplete="email"></label>
+          <label>Telefon<input name="phone" type="tel" autocomplete="tel"></label>
+        </div>
+      </fieldset>
+
       <fieldset>
         <legend>Anlegg</legend>
         <div class="grid">
@@ -164,8 +179,10 @@
         <button type="button" id="example" class="secondary">Fyll inn eksempel</button>
         <button type="button" id="reset" class="secondary">Nullstill</button>
         <button type="button" id="export" class="secondary">Eksporter JSON</button>
-        <button type="button" id="print">Skriv ut rapport</button>
+        <button type="button" id="print" class="secondary">Skriv ut rapport</button>
+        <button type="button" id="send">Send rapport til Envatec</button>
       </div>
+      <p id="send-status" class="hint" role="status"></p>
     </form>
   </section>
 
@@ -454,7 +471,42 @@ function render() {
     <p class="disclaimer">Grenseverdiene er veiledende og bygger på VDI 2035 / NS-EN 14868 og vanlig bransjepraksis. Følg alltid krav fra produsenten av kjel, varmepumpe eller andre komponenter. Endelig dimensjonering av filter og avgasser gjøres i samråd med Envatec AS (tlf. 400 07 550, post@envatec.no).</p>`;
 }
 
+const ENVATEC_EMAIL = "info@envatec.odoo.com";
+
+function reportText(d = readForm()) {
+  const r = analyze(d);
+  const L = { ok: "OK", warn: "Avvik", bad: "Kritisk" };
+  const lines = [`Anleggsanalyse: ${d.name || "Uten navn"}${d.date ? ` (prøvedato ${d.date})` : ""}`, ""];
+  lines.push("KONTAKT", `Firma: ${d.company || "-"}`, `Kontaktperson: ${d.contact || "-"}`, `E-post: ${d.email || "-"}`, `Telefon: ${d.phone || "-"}`, "");
+  lines.push("ANLEGG", `Type: ${form.systemType.selectedOptions[0].text}`, `Medium: ${form.medium.selectedOptions[0].text}${d.glycolPct ? ` ${d.glycolPct} %` : ""}`,
+    `Volum: ${d.volume || "-"} l, effekt: ${d.power || "-"} kW, maks tur: ${d.temp || "-"} °C, trykk: ${d.pressure || "-"} bar, alder: ${d.age || "-"} år`, "");
+  lines.push("FUNN");
+  r.findings.forEach(x => lines.push(`- ${x.param}: ${x.value} [${L[x.level]}] ${x.text}`));
+  lines.push("", "ANBEFALTE PRODUKTER");
+  if (r.products.length) r.products.forEach(p => lines.push(`- ${p.name}: ${p.reason}`)); else lines.push("- Ingen");
+  lines.push("", "ANBEFALTE TILTAK");
+  r.actions.forEach((a, i) => lines.push(`${i + 1}. ${a}`));
+  return lines.join("\n");
+}
+
+function sendReport() {
+  const d = readForm();
+  const status = document.getElementById("send-status");
+  if (!d.contact || !(d.email || d.phone)) {
+    status.textContent = "Fyll inn kontaktperson og e-post eller telefon, så Envatec kan svare deg.";
+    form.contact.focus();
+    return;
+  }
+  const text = reportText(d);
+  const subject = `Anleggsanalyse: ${d.name || d.company || "nytt anlegg"}`;
+  // Kopier også til utklippstavlen, i tilfelle e-postprogrammet kutter lange meldinger.
+  try { navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
+  location.href = `mailto:${ENVATEC_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+  status.textContent = `E-postprogrammet åpnes med rapporten til ${ENVATEC_EMAIL}. Trykk Send der. Rapporten er også kopiert, så du kan lime den inn hvis teksten mangler.`;
+}
+
 const EXAMPLE = {
+  company: "Eksempel Eiendom AS", contact: "Kari Nordmann", email: "kari@eksempel.no", phone: "900 00 000",
   name: "Borettslag Eksempelveien 12", date: new Date().toISOString().slice(0, 10), systemType: "varme", medium: "vann",
   glycolPct: "", volume: "4500", power: "250", temp: "65", pressure: "2.5", age: "18",
   aluminium: false, plastPipes: true, hasFilter: false, hasDegasser: false,
@@ -467,6 +519,7 @@ form.addEventListener("input", render);
 form.addEventListener("change", render);
 document.getElementById("example").addEventListener("click", () => { writeForm(EXAMPLE); render(); });
 document.getElementById("reset").addEventListener("click", () => { form.reset(); render(); });
+document.getElementById("send").addEventListener("click", sendReport);
 document.getElementById("print").addEventListener("click", () => window.print());
 document.getElementById("export").addEventListener("click", () => {
   const d = readForm();
