@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anleggsanalyse vannbåren</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --text: #1d2733; --muted: #5b6876; --border: #d8dee6;
+    --accent: #0b6aa8; --accent-weak: #e3f0f9;
+    --ok: #1f7a4a; --ok-bg: #e5f4ec; --warn: #9a6200; --warn-bg: #fdf3dc; --bad: #b3261e; --bad-bg: #fbe7e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12171d; --card: #1b222b; --text: #e6ebf0; --muted: #9aa7b4; --border: #2e3843;
+      --accent: #5aaee6; --accent-weak: #1d3242;
+      --ok: #6fcf97; --ok-bg: #18301f; --warn: #f2c063; --warn-bg: #3a2e14; --bad: #f2867c; --bad-bg: #3b1d1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 20px 16px 8px; max-width: 1100px; margin: 0 auto; }
+  header h1 { margin: 0 0 4px; font-size: 1.5rem; }
+  header p { margin: 0; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 40px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } #results { position: sticky; top: 12px; } }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  fieldset { border: 0; margin: 0 0 16px; padding: 0; }
+  legend { font-weight: 600; font-size: 1.05rem; margin-bottom: 8px; padding: 0; }
+  .grid { display: grid; gap: 10px 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: .9rem; color: var(--muted); }
+  label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
+  input, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px; width: 100%; }
+  label.check input { width: auto; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hint { font-size: .8rem; color: var(--muted); }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  button { font: inherit; border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  h2 { margin: 0 0 10px; font-size: 1.2rem; }
+  h3 { margin: 18px 0 8px; font-size: 1rem; }
+  .summary { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-weight: 600; }
+  .status-ok { background: var(--ok-bg); color: var(--ok); }
+  .status-warn { background: var(--warn-bg); color: var(--warn); }
+  .status-bad { background: var(--bad-bg); color: var(--bad); }
+  .table-wrap { overflow-x: auto; }
+  td:last-child { min-width: 180px; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: .78rem; font-weight: 600; white-space: nowrap; }
+  ul.findings { padding-left: 0; list-style: none; margin: 0; }
+  ul.findings li { padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; }
+  .product { border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+  .product .name { font-weight: 700; }
+  .product .tag { background: var(--accent-weak); color: var(--accent); }
+  .product ul { margin: 6px 0 0; padding-left: 18px; }
+  ol.actions { padding-left: 20px; margin: 0; }
+  ol.actions li { margin-bottom: 6px; }
+  .disclaimer { font-size: .8rem; color: var(--muted); margin-top: 16px; }
+  .empty { color: var(--muted); }
+  @media print {
+    body { background: #fff; color: #000; }
+    #form-card, .buttons, header p { display: none; }
+    main { display: block; }
+    .card { border: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Anleggsanalyse for vannbårne anlegg</h1>
+  <p>Legg inn målte verdier og observasjoner. Appen vurderer væskekvaliteten og foreslår tiltak, blant annet delstrømsfiltre fra Envatec AS.</p>
+</header>
+
+<main>
+  <section class="card" id="form-card">
+    <form id="form" autocomplete="off">
+      <fieldset>
+        <legend>Anlegg</legend>
+        <div class="grid">
+          <label>Prosjekt / anleggsnavn<input name="name" type="text"></label>
+          <label>Dato for prøve<input name="date" type="date"></label>
+          <label>Anleggstype
+            <select name="systemType">
+              <option value="varme">Varmeanlegg (radiator/gulvvarme)</option>
+              <option value="kjoling">Kjøleanlegg</option>
+              <option value="varmepumpe">Varmepumpe / energibrønn</option>
+              <option value="fjernvarme">Fjernvarme sekundærside</option>
+              <option value="snosmelting">Snøsmelteanlegg</option>
+            </select>
+          </label>
+          <label>Medium
+            <select name="medium">
+              <option value="vann">Vann</option>
+              <option value="glykol">Glykol (etylen/propylen)</option>
+              <option value="etanol">Etanol</option>
+            </select>
+          </label>
+          <label>Konsentrasjon frostvæske (%)<input name="glycolPct" type="number" step="1" min="0" max="100"></label>
+          <label>Anleggsvolum (liter)<input name="volume" type="number" step="10" min="0"></label>
+          <label>Effekt (kW)<input name="power" type="number" step="1" min="0"></label>
+          <label>Maks turtemperatur (°C)<input name="temp" type="number" step="1"></label>
+          <label>Driftstrykk (bar)<input name="pressure" type="number" step="0.1" min="0"></label>
+          <label>Anleggets alder (år)<input name="age" type="number" step="1" min="0"></label>
+        </div>
+        <div class="grid" style="margin-top:10px">
+          <label class="check"><input name="aluminium" type="checkbox"> Aluminium i anlegget</label>
+          <label class="check"><input name="plastPipes" type="checkbox"> Plastrør uten diffusjonssperre</label>
+          <label class="check"><input name="hasFilter" type="checkbox"> Har delstrømsfilter i dag</label>
+          <label class="check"><input name="hasDegasser" type="checkbox"> Har avgasser i dag</label>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Målte verdier</legend>
+        <div class="grid">
+          <label>pH<input name="ph" type="number" step="0.1" min="0" max="14"></label>
+          <label>Ledningsevne (µS/cm)<input name="conductivity" type="number" step="1" min="0"></label>
+          <label>Oksygen O₂ (mg/l)<input name="oxygen" type="number" step="0.01" min="0"></label>
+          <label>Hardhet (°dH)<input name="hardness" type="number" step="0.1" min="0"></label>
+          <label>Jern Fe (mg/l)<input name="iron" type="number" step="0.01" min="0"></label>
+          <label>Kobber Cu (mg/l)<input name="copper" type="number" step="0.01" min="0"></label>
+          <label>Inhibitor (andel av anbefalt, %)<input name="inhibitor" type="number" step="1" min="0"></label>
+        </div>
+        <p class="hint">La felt stå tomme hvis verdien ikke er målt.</p>
+      </fieldset>
+
+      <fieldset>
+        <legend>Observasjoner</legend>
+        <div class="grid">
+          <label>Utseende på væsken
+            <select name="appearance">
+              <option value="">Ikke vurdert</option>
+              <option value="klar">Klar</option>
+              <option value="lett">Lett misfarget / blakket</option>
+              <option value="brun">Brun / rødlig (rust)</option>
+              <option value="svart">Svart (magnetitt)</option>
+              <option value="slam">Synlig slam / partikler</option>
+            </select>
+          </label>
+          <label>Etterfylling
+            <select name="refill">
+              <option value="">Ukjent</option>
+              <option value="aldri">Sjelden / aldri</option>
+              <option value="arlig">Noen ganger i året</option>
+              <option value="hyppig">Månedlig eller oftere</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid" style="margin-top:10px">
+          <label class="check"><input name="magnetite" type="checkbox"> Magnetitt på magnet / i filter</label>
+          <label class="check"><input name="airNoise" type="checkbox"> Luftlyder / bobler</label>
+          <label class="check"><input name="manualVenting" type="checkbox"> Må lufte manuelt ofte</label>
+          <label class="check"><input name="coldRadiators" type="checkbox"> Kalde soner / dårlig sirkulasjon</label>
+          <label class="check"><input name="pumpIssues" type="checkbox"> Pumpestopp / slitasje</label>
+          <label class="check"><input name="valveIssues" type="checkbox"> Ventiler som henger / tetter seg</label>
+          <label class="check"><input name="hxFouling" type="checkbox"> Redusert effekt i varmeveksler</label>
+          <label class="check"><input name="leaks" type="checkbox"> Lekkasjer / korrosjonsskader</label>
+        </div>
+      </fieldset>
+
+      <div class="buttons">
+        <button type="button" id="example" class="secondary">Fyll inn eksempel</button>
+        <button type="button" id="reset" class="secondary">Nullstill</button>
+        <button type="button" id="export" class="secondary">Eksporter JSON</button>
+        <button type="button" id="print">Skriv ut rapport</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card" id="results" aria-live="polite"></section>
+</main>
+
+<script>
+/* ---------------------------------------------------------------------------
+ * Produktkatalog – Envatec AS (envatec.no)
+ * Data hentet fra Envatecs produktsider. Verdier merket "null" er ikke oppgitt
+ * offentlig; bekreft dimensjonering med Envatec (tlf. 400 07 550, post@envatec.no).
+ * ------------------------------------------------------------------------- */
+const PRODUCTS = {
+  "GTE-S4": {
+    type: "Delstrømsfilter med filterpose og magnet",
+    filtration: "5 µm (1 µm på forespørsel)",
+    magnet: "12 000 GS",
+    maxTemp: 70, maxPressure: 10, flowM3PerDay: null,
+    media: ["vann", "glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/delstromsfilter-gte-s4",
+    summary: "Kjemikaliefri fjerning av magnetitt, avleiringer og partikler. Standardvalg for de fleste varme- og kjøleanlegg innenfor 70 °C / 10 bar.",
+  },
+  "GTE-MS": {
+    type: "Delstrømsfilter med filterpatroner, magneter som tillegg",
+    filtration: "5 µm",
+    magnet: "Tilvalg",
+    maxTemp: 90, maxPressure: 10, flowM3PerDay: null,
+    media: ["vann", "glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/delstromsfilter-gte-ms",
+    summary: "Patronfilter for anlegg med turtemperatur over 70 °C.",
+  },
+  "GTE-M": {
+    type: "Delstrømsfilter med 7 filterpatroner",
+    filtration: "Patroner",
+    magnet: "-",
+    maxTemp: 90, maxPressure: 10, flowM3PerDay: 120,
+    media: ["vann", "glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/delstromsfilter-gte-m",
+    summary: "Høy kapasitet (120 m³/døgn) og opptil 90 °C. For store anlegg og høye temperaturer.",
+  },
+  "GTE-PRO": {
+    type: "Delstrømsfilter med vakuumavgasser",
+    filtration: "1 µm filterpose",
+    magnet: "4 × 10 000 GS",
+    maxTemp: 70, maxPressure: 4.5, flowM3PerDay: 120,
+    media: ["vann", "glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/delstromsfilter-gte-pro",
+    summary: "Filtrering, magnetutskilling og vakuumavgassing i én enhet. For anlegg med både partikler og luft- eller oksygenproblemer.",
+  },
+  "GTE-S4-TP": {
+    type: "Transportabelt delstrømsfilter",
+    filtration: "5 µm",
+    magnet: "12 000 GS",
+    maxTemp: 70, maxPressure: 10, flowM3PerDay: null,
+    media: ["vann", "glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/",
+    summary: "Mobil enhet for midlertidig rensing eller oppstart, med tilkobling for vakuumavgasser.",
+  },
+  "Vakuumavgasser (transportabel)": {
+    type: "Reflex Servitec 60 / Spirotech S 400 via Envatec",
+    filtration: "-", magnet: "-", maxTemp: null, maxPressure: null, flowM3PerDay: null,
+    media: ["vann", "glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/",
+    summary: "Fjerner oppløste gasser (O₂, N₂) fra anleggsvæsken. Kan leies eller kjøpes for en periode.",
+  },
+  "GTE-P100": {
+    type: "Påfyllingsenhet for glykol/etanol",
+    filtration: "-", magnet: "-", maxTemp: null, maxPressure: null, flowM3PerDay: null,
+    media: ["glykol", "etanol"],
+    url: "https://www.envatec.no/produkter/gte-p100",
+    summary: "Gir kontrollert etterfylling og riktig konsentrasjon av frostvæske.",
+  },
+};
+
+/* Veiledende grenseverdier (basert på VDI 2035 / NS-EN 14868 og vanlig bransjepraksis).
+ * Juster her ved behov. */
+const LIMITS = {
+  phMin: 8.2, phMaxSteel: 10.0, phMaxAl: 9.0, phMinGlycol: 7.5,
+  condLowSalt: 100, condMax: 1500,
+  o2Low: 0.02, o2LowSalt: 0.1, o2High: 0.2,
+  hardnessSmall: 16.8, hardnessMedium: 11.2, hardnessLarge: 8.4, hardnessXL: 0.11, // °dH etter effektgruppe (VDI 2035 forenklet)
+  ironWarn: 0.5, ironBad: 1.0,
+  copperWarn: 0.1, copperBad: 0.5,
+  glycolMin: 20, glycolMax: 50,
+  inhibitorMin: 80,
+  largeVolume: 20000, // liter – grense for å foreslå filter med høy kapasitet
+};
+
+const num = v => (v === "" || v === null || v === undefined || Number.isNaN(Number(v))) ? null : Number(v);
+
+/* Returnerer { findings, products, actions, status }.
+ * finding: { level: "ok"|"warn"|"bad", param, value, text } */
+function analyze(d) {
+  const f = [];
+  const add = (level, param, value, text) => f.push({ level, param, value, text });
+  const isGlycol = d.medium === "glykol" || d.medium === "etanol";
+  const ph = num(d.ph), cond = num(d.conductivity), o2 = num(d.oxygen), hard = num(d.hardness);
+  const fe = num(d.iron), cu = num(d.copper), inh = num(d.inhibitor), pct = num(d.glycolPct);
+  const vol = num(d.volume), kw = num(d.power), temp = num(d.temp), bar = num(d.pressure);
+
+  // pH
+  if (ph !== null) {
+    const min = isGlycol ? LIMITS.phMinGlycol : LIMITS.phMin;
+    const max = d.aluminium ? LIMITS.phMaxAl : LIMITS.phMaxSteel;
+    if (ph < min - 0.5) add("bad", "pH", ph, `pH er for lav (anbefalt ${min}–${max}). Vannet er korrosivt for stål${isGlycol ? ", og glykolen kan være nedbrutt eller sur" : ""}.`);
+    else if (ph < min) add("warn", "pH", ph, `pH er litt lav (anbefalt ${min}–${max}).`);
+    else if (ph > max) add(d.aluminium ? "bad" : "warn", "pH", ph, `pH er for høy (anbefalt maks ${max}${d.aluminium ? " med aluminium i anlegget" : ""}).`);
+    else add("ok", "pH", ph, `Innenfor anbefalt område (${min}–${max}).`);
+  }
+  // Ledningsevne
+  if (cond !== null && !isGlycol) {
+    if (cond > LIMITS.condMax) add("bad", "Ledningsevne", cond, `Høyt saltinnhold (> ${LIMITS.condMax} µS/cm) gir økt korrosjonsrisiko.`);
+    else if (cond > LIMITS.condLowSalt) add("warn", "Ledningsevne", cond, `Saltholdig vann (${LIMITS.condLowSalt}–${LIMITS.condMax} µS/cm). Da gjelder strengere krav til oksygen (< ${LIMITS.o2Low} mg/l).`);
+    else add("ok", "Ledningsevne", cond, "Saltfattig vann (< 100 µS/cm).");
+  } else if (cond !== null && isGlycol) {
+    add("ok", "Ledningsevne", cond, "Ledningsevne er ikke vurdert for glykol- og etanolblandinger.");
+  }
+  // Oksygen
+  if (o2 !== null) {
+    const lim = (cond !== null && cond > LIMITS.condLowSalt) ? LIMITS.o2Low : LIMITS.o2LowSalt;
+    if (o2 > LIMITS.o2High) add("bad", "Oksygen", o2, "Høyt oksygeninnhold. Det tyder på luftinntrengning, undertrykk, diffusjon eller hyppig etterfylling.");
+    else if (o2 > lim) add("warn", "Oksygen", o2, `Over anbefalt grense (${lim} mg/l).`);
+    else add("ok", "Oksygen", o2, `Under ${lim} mg/l.`);
+  }
+  // Hardhet
+  if (hard !== null && !isGlycol) {
+    let lim = LIMITS.hardnessSmall;
+    if (kw !== null && kw > 600) lim = LIMITS.hardnessXL;
+    else if (kw !== null && kw > 200) lim = LIMITS.hardnessLarge;
+    else if (kw !== null && kw > 50) lim = LIMITS.hardnessMedium;
+    if (vol !== null && kw && vol / kw > 20) lim = Math.min(lim, LIMITS.hardnessMedium); // stort spesifikt volum
+    if (hard > lim) add("bad", "Hardhet", hard, `Over veiledende grense (${lim} °dH) for anleggsstørrelsen. Det gir fare for kalkbelegg i varmevekslere og kjeler.`);
+    else if (hard > lim * 0.7) add("warn", "Hardhet", hard, `Nær grensen (${lim} °dH).`);
+    else add("ok", "Hardhet", hard, `Under veiledende grense (${lim} °dH).`);
+  }
+  // Jern
+  if (fe !== null) {
+    if (fe > LIMITS.ironBad) add("bad", "Jern", fe, "Høyt jerninnhold. Det tyder på aktiv korrosjon og magnetittdannelse.");
+    else if (fe > LIMITS.ironWarn) add("warn", "Jern", fe, "Forhøyet jerninnhold. Begynnende korrosjon.");
+    else add("ok", "Jern", fe, `Under ${LIMITS.ironWarn} mg/l.`);
+  }
+  // Kobber
+  if (cu !== null) {
+    if (cu > LIMITS.copperBad) add("bad", "Kobber", cu, "Høyt kobberinnhold. Det tyder på korrosjon av kobberkomponenter og øker faren for galvanisk korrosjon.");
+    else if (cu > LIMITS.copperWarn) add("warn", "Kobber", cu, "Forhøyet kobberinnhold.");
+    else add("ok", "Kobber", cu, `Under ${LIMITS.copperWarn} mg/l.`);
+  }
+  // Frostvæske
+  if (isGlycol && pct !== null) {
+    if (pct < LIMITS.glycolMin) add("bad", "Frostvæske", pct, `For lav konsentrasjon (< ${LIMITS.glycolMin} %). Det gir dårlig frostsikring og fare for bakterievekst.`);
+    else if (pct > LIMITS.glycolMax) add("warn", "Frostvæske", pct, `Høy konsentrasjon (> ${LIMITS.glycolMax} %). Det gir økt viskositet og redusert varmeoverføring.`);
+    else add("ok", "Frostvæske", pct, "Konsentrasjonen er innenfor normalt område.");
+  }
+  // Inhibitor
+  if (inh !== null) {
+    if (inh < LIMITS.inhibitorMin / 2) add("bad", "Inhibitor", inh, "Inhibitoren er i stor grad oppbrukt.");
+    else if (inh < LIMITS.inhibitorMin) add("warn", "Inhibitor", inh, "Inhibitornivået er lavt.");
+    else add("ok", "Inhibitor", inh, "Inhibitornivået er tilfredsstillende.");
+  }
+  // Observasjoner
+  const app = d.appearance;
+  if (app === "svart") add("bad", "Utseende", "Svart", "Svart væske tyder på magnetitt (Fe₃O₄) fra korrosjon.");
+  else if (app === "brun") add("bad", "Utseende", "Brun/rødlig", "Rødbrun væske tyder på oksygenkorrosjon (Fe₂O₃).");
+  else if (app === "slam") add("bad", "Utseende", "Slam", "Synlige partikler og slam i væsken.");
+  else if (app === "lett") add("warn", "Utseende", "Lett misfarget", "Lett misfarget væske. Følg utviklingen.");
+  else if (app === "klar") add("ok", "Utseende", "Klar", "Væsken er klar.");
+  if (d.magnetite) add("bad", "Magnetitt", "Påvist", "Det er funnet magnetitt på magnet eller i filter.");
+  if (d.airNoise || d.manualVenting) add("warn", "Luft/gass", "Observert", "Luft eller gass i anlegget. Det kan skyldes for lavt trykk, ekspansjonskar som ikke virker, eller manglende avgassing.");
+  if (d.refill === "hyppig") add("bad", "Etterfylling", "Hyppig", "Hyppig etterfylling tilfører nytt oksygen og kalk. Det tyder på lekkasje eller feil på ekspansjonssystemet.");
+  else if (d.refill === "arlig") add("warn", "Etterfylling", "Noen ganger/år", "Hold øye med etterfyllingsmengden. Installer gjerne vannmåler på påfyllingen.");
+  if (d.coldRadiators) add("warn", "Sirkulasjon", "Kalde soner", "Kalde soner kan skyldes luft, slam eller tilstoppede ventiler.");
+  if (d.pumpIssues) add("bad", "Pumpe", "Problemer", "Magnetitt samler seg ofte i rotoren på EC-pumper (permanentmagnet) og gir slitasje og stopp.");
+  if (d.valveIssues) add("warn", "Ventiler", "Problemer", "Belegg og partikler kan få reguleringsventiler til å henge.");
+  if (d.hxFouling) add("warn", "Varmeveksler", "Redusert effekt", "Belegg eller slam i varmeveksleren gir dårligere varmeoverføring.");
+  if (d.leaks) add("bad", "Lekkasje", "Observert", "Lekkasjer og korrosjonsskader må utbedres før vannbehandling har varig effekt.");
+  if (d.plastPipes) add("warn", "Rør", "Plast uten sperre", "Oksygen diffunderer inn gjennom plastrør uten diffusjonssperre.");
+
+  // ---- Tiltak og produktvalg ----
+  const has = p => f.some(x => x.param === p && x.level !== "ok");
+  const particleProblem = has("Utseende") || has("Magnetitt") || has("Jern") || has("Pumpe") || has("Ventiler") || has("Varmeveksler") || has("Sirkulasjon");
+  const gasProblem = has("Oksygen") || has("Luft/gass") || d.plastPipes;
+  const severe = f.filter(x => x.level === "bad").length;
+  const highTemp = temp !== null && temp > 70;
+  const lowPressureOK = bar === null || bar <= 4.5;
+  const large = vol !== null && vol > LIMITS.largeVolume;
+
+  const products = [];
+  const pick = (name, reason) => { if (!products.some(p => p.name === name)) products.push({ name, reason, ...PRODUCTS[name] }); };
+
+  if (particleProblem || !d.hasFilter) {
+    if (gasProblem && !highTemp && lowPressureOK && !d.hasDegasser) {
+      pick("GTE-PRO", "Anlegget har både partikler/magnetitt og luft eller oksygen. GTE-PRO kombinerer 1 µm filtrering, magneter og vakuumavgassing.");
+    } else if (highTemp || large) {
+      pick("GTE-M", highTemp ? `Turtemperaturen (${temp} °C) er over 70 °C. GTE-M tåler opptil 90 °C.` : `Stort anleggsvolum (${vol} l). GTE-M har høy kapasitet (120 m³/døgn).`);
+      if (has("Magnetitt") || has("Pumpe") || app === "svart") pick("GTE-MS", "Alternativ med magneter (tilvalg) for magnetittutskilling ved høy temperatur.");
+    } else {
+      pick("GTE-S4", d.hasFilter ? "Eksisterende filter ser ikke ut til å være tilstrekkelig. GTE-S4 med 5 µm pose og 12 000 GS magnet gir god magnetittutskilling." : "Anlegget mangler delstrømsfilter. GTE-S4 med 5 µm pose og 12 000 GS magnet fjerner magnetitt og partikler kontinuerlig.");
+    }
+    if (gasProblem && !products.some(p => p.name === "GTE-PRO") && !d.hasDegasser) {
+      pick("Vakuumavgasser (transportabel)", bar !== null && bar > 4.5 ? `Driftstrykket (${bar} bar) er over grensen for GTE-PRO (4,5 bar). Bruk egen vakuumavgasser.` : "Luft eller oksygen i anlegget bør fjernes med vakuumavgassing.");
+    }
+  } else if (gasProblem && !d.hasDegasser) {
+    if (lowPressureOK && !highTemp) pick("GTE-PRO", "Oksygen- eller luftproblem. GTE-PRO gir avgassing og filtrering.");
+    else pick("Vakuumavgasser (transportabel)", "Oksygen- eller luftproblem. Vakuumavgassing anbefales.");
+  }
+  if (severe >= 3 && (app === "svart" || app === "slam" || d.magnetite)) {
+    pick("GTE-S4-TP", "Mye forurensning. Rens først med transportabelt filter med høy belastning, før det permanente filteret overtar.");
+  }
+  if (d.medium !== "vann" && (has("Frostvæske") || d.refill === "hyppig" || d.refill === "arlig")) {
+    pick("GTE-P100", "Gir kontrollert etterfylling av frostvæske og riktig konsentrasjon.");
+  }
+
+  const actions = [];
+  if (d.leaks || d.refill === "hyppig") actions.push("Finn og utbedre lekkasjer. Kontroller ekspansjonskar (fortrykk) og sikkerhetsventiler.");
+  if (has("Luft/gass") || has("Oksygen")) actions.push("Kontroller systemtrykk og fortrykk i ekspansjonskar, og sørg for overtrykk i alle deler av anlegget.");
+  if (severe >= 3 && particleProblem) actions.push("Vurder spyling eller rengjøring av anlegget med transportabelt filter før permanent filter monteres.");
+  if (products.some(p => ["GTE-S4", "GTE-M", "GTE-MS", "GTE-PRO"].includes(p.name))) actions.push("Monter delstrømsfilter på returledningen før kjel, varmepumpe eller veksler, med avstengning og bypass for service.");
+  if (has("pH")) actions.push(ph !== null && ph < (isGlycol ? LIMITS.phMinGlycol : LIMITS.phMin) ? "Juster pH opp (alkalisering) etter at filtreringen har fått virke." : "Juster pH ned, særlig ved aluminium i anlegget.");
+  if (has("Hardhet")) actions.push("Bruk avherdet eller avsaltet vann ved etterfylling (myknings- eller avsaltingsenhet).");
+  if (has("Ledningsevne")) actions.push("Vurder avsalting (ionebytter) for å komme under 100 µS/cm.");
+  if (has("Inhibitor")) actions.push("Fyll på inhibitor etter leverandørens anbefaling, og mål på nytt etter 4–6 uker.");
+  if (has("Frostvæske")) actions.push("Juster frostvæskekonsentrasjonen og kontroller frysepunktet med refraktometer.");
+  if (d.plastPipes) actions.push("Oksygen diffunderer inn gjennom plastrørene. Skill kretsene med varmeveksler, eller sørg for kontinuerlig avgassing og filtrering.");
+  if (has("Pumpe")) actions.push("Demonter og rengjør pumperotorer. Monter magnetfilter foran EC-pumper.");
+  if (has("Varmeveksler")) actions.push("Rengjør varmeveksleren (CIP-spyling) og mål differansetrykket før og etter.");
+  actions.push(products.length ? "Ta ny væskeprøve 1–3 måneder etter tiltakene for å dokumentere effekten." : "Fortsett med årlig væskeanalyse.");
+
+  const status = severe > 0 ? "bad" : f.some(x => x.level === "warn") ? "warn" : f.length ? "ok" : "none";
+  return { findings: f, products, actions, status };
+}
+
+/* --------------------------------- UI ----------------------------------- */
+const form = document.getElementById("form");
+const results = document.getElementById("results");
+const STORAGE_KEY = "anleggsanalyse.v1";
+const LEVEL = { ok: ["OK", "status-ok"], warn: ["Avvik", "status-warn"], bad: ["Kritisk", "status-bad"] };
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+function readForm() {
+  const d = {};
+  for (const el of form.elements) {
+    if (!el.name) continue;
+    d[el.name] = el.type === "checkbox" ? el.checked : el.value;
+  }
+  return d;
+}
+function writeForm(d) {
+  for (const el of form.elements) {
+    if (!el.name || !(el.name in d)) continue;
+    if (el.type === "checkbox") el.checked = !!d[el.name]; else el.value = d[el.name];
+  }
+}
+
+function render() {
+  const d = readForm();
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch (e) {}
+  const r = analyze(d);
+  const head = d.name ? `<h2>${esc(d.name)}</h2>` : "<h2>Vurdering</h2>";
+  if (r.status === "none") {
+    results.innerHTML = head + '<p class="empty">Fyll inn målte verdier eller observasjoner for å få en vurdering.</p>';
+    return;
+  }
+  const summaryText = { ok: "Væskekvaliteten ser god ut.", warn: "Det er avvik som bør følges opp.", bad: "Kritiske avvik. Tiltak anbefales." }[r.status];
+  const rows = r.findings.map(x => `<tr><td>${esc(x.param)}</td><td>${esc(x.value)}</td><td><span class="pill ${LEVEL[x.level][1]}">${LEVEL[x.level][0]}</span></td><td>${esc(x.text)}</td></tr>`).join("");
+  const prods = r.products.length ? r.products.map(p => `
+    <div class="product">
+      <div><span class="name">${esc(p.name)}</span> <span class="pill tag">${esc(p.type)}</span></div>
+      <div>${esc(p.reason)}</div>
+      <ul>
+        <li>${esc(p.summary)}</li>
+        ${p.filtration !== "-" ? `<li>Filtrering: ${esc(p.filtration)}${p.magnet !== "-" ? `, magnet: ${esc(p.magnet)}` : ""}</li>` : ""}
+        ${p.maxTemp ? `<li>Maks ${p.maxTemp} °C / ${String(p.maxPressure).replace(".", ",")} bar${p.flowM3PerDay ? `, ${p.flowM3PerDay} m³/døgn` : ""}</li>` : ""}
+        <li><a href="${esc(p.url)}" target="_blank" rel="noopener">Produktside hos Envatec</a></li>
+      </ul>
+    </div>`).join("") : '<p class="empty">Ingen produkter anbefales ut fra verdiene som er lagt inn.</p>';
+  results.innerHTML = `
+    ${head}
+    ${d.date ? `<p class="hint">Prøvedato: ${esc(d.date)}</p>` : ""}
+    <div class="summary status-${r.status}">${summaryText}</div>
+    <h3>Funn</h3>
+    <div class="table-wrap"><table><thead><tr><th>Parameter</th><th>Verdi</th><th>Status</th><th>Kommentar</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <h3>Anbefalte produkter fra Envatec AS</h3>
+    ${prods}
+    <h3>Anbefalte tiltak</h3>
+    <ol class="actions">${r.actions.map(a => `<li>${esc(a)}</li>`).join("")}</ol>
+    <p class="disclaimer">Grenseverdiene er veiledende og bygger på VDI 2035 / NS-EN 14868 og vanlig bransjepraksis. Følg alltid krav fra produsenten av kjel, varmepumpe eller andre komponenter. Endelig dimensjonering av filter og avgasser gjøres i samråd med Envatec AS (tlf. 400 07 550, post@envatec.no).</p>`;
+}
+
+const EXAMPLE = {
+  name: "Borettslag Eksempelveien 12", date: new Date().toISOString().slice(0, 10), systemType: "varme", medium: "vann",
+  glycolPct: "", volume: "4500", power: "250", temp: "65", pressure: "2.5", age: "18",
+  aluminium: false, plastPipes: true, hasFilter: false, hasDegasser: false,
+  ph: "7.6", conductivity: "420", oxygen: "0.25", hardness: "6", iron: "1.8", copper: "0.08", inhibitor: "",
+  appearance: "svart", refill: "arlig", magnetite: true, airNoise: true, manualVenting: false,
+  coldRadiators: true, pumpIssues: true, valveIssues: false, hxFouling: false, leaks: false,
+};
+
+form.addEventListener("input", render);
+form.addEventListener("change", render);
+document.getElementById("example").addEventListener("click", () => { writeForm(EXAMPLE); render(); });
+document.getElementById("reset").addEventListener("click", () => { form.reset(); render(); });
+document.getElementById("print").addEventListener("click", () => window.print());
+document.getElementById("export").addEventListener("click", () => {
+  const d = readForm();
+  const blob = new Blob([JSON.stringify({ input: d, result: analyze(d) }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `anleggsanalyse-${(d.name || "anlegg").replace(/[^\wæøåÆØÅ-]+/g, "_")}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+try { const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); if (saved) writeForm(saved); } catch (e) {}
+render();
+</script>
+</body>
+</html>
